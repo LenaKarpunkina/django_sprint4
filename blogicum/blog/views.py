@@ -1,54 +1,45 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
-from django.core.paginator import Paginator
-from django.db.models import Count
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from .forms import CommentForm, PostForm, UserForm
 from .models import Category, Comment, Post
+from .utils import paginate_queryset
 
 
 def index(request):
     post_list = (
-        Post.objects.filter(
-            is_published=True,
-            pub_date__lte=timezone.now(),
-            category__is_published=True
-        )
+        Post.objects.with_comments_count()
+        .published()
         .select_related('location', 'category', 'author')
-        .annotate(comment_count=Count('comments'))
         .order_by('-pub_date')
     )
-    paginator = Paginator(post_list, 10)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+    page_obj = paginate_queryset(request, post_list)
     return render(request, 'blog/index.html', {'page_obj': page_obj})
 
 
 def category_posts(request, slug):
     category = get_object_or_404(Category, slug=slug, is_published=True)
     post_list = (
-        Post.objects.filter(
-            is_published=True,
-            pub_date__lte=timezone.now(),
-            category=category
-        )
+        Post.objects.with_comments_count()
+        .published()
+        .filter(category=category)
         .select_related('location', 'author')
-        .annotate(comment_count=Count('comments'))
         .order_by('-pub_date')
     )
-    paginator = Paginator(post_list, 10)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+    page_obj = paginate_queryset(request, post_list)
     return render(request, 'blog/category.html', {'category': category, 'page_obj': page_obj})
 
 
 def post_detail(request, post_id):
     post = get_object_or_404(Post, pk=post_id)
+    
     if post.author != request.user:
+        category_is_published = post.category and post.category.is_published
+        
         if not (post.is_published and 
-                post.category.is_published and 
+                category_is_published and 
                 post.pub_date <= timezone.now()):
             raise Http404
       
@@ -64,24 +55,18 @@ def post_detail(request, post_id):
 
 
 def profile(request, username):
-    profile = get_object_or_404(User, username=username)
-    posts_query = profile.post_set.annotate(comment_count=Count('comments')).order_by('-pub_date')
+    profile_user = get_object_or_404(User, username=username)
+    posts_query = (
+        Post.objects.with_comments_count()
+        .filter(author=profile_user)
+        .order_by('-pub_date')
+    )
     
-    if request.user != profile:
-        posts_query = posts_query.filter(
-            is_published=True,
-            category__is_published=True,
-            pub_date__lte=timezone.now()
-        )
-
-    paginator = Paginator(posts_query, 10)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+    if request.user != profile_user:
+        posts_query = posts_query.published()
     
-    context = {
-        'profile': profile,
-        'page_obj': page_obj,
-    }
+    page_obj = paginate_queryset(request, posts_query)
+    context = {'profile': profile_user, 'page_obj': page_obj}
     return render(request, 'blog/profile.html', context)
 
 
@@ -128,8 +113,7 @@ def delete_post(request, post_id):
         instance.delete()
         return redirect('blog:index')
     
-    form = PostForm(instance=instance)
-    return render(request, 'blog/create.html', {'form': form, 'is_edit': True})
+    return render(request, 'blog/delete_post.html', {'post': instance})
 
 
 @login_required

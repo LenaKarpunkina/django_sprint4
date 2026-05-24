@@ -9,26 +9,18 @@ from django.views.generic.edit import CreateView
 handler404 = 'pages.views.page_not_found'
 handler500 = 'pages.views.server_error'
 handler403 = 'pages.views.csrf_failure'
+
 urlpatterns = [
-path('admin/', admin.site.urls),
-    path('auth/', include('django.contrib.auth.urls')),
-    # Используем CBV для статичных страниц:
-    path(
-        'about/', 
-        TemplateView.as_view(template_name='pages/about.html'), 
-        name='about'
-    ),
-    path(
-        'rules/', 
-        TemplateView.as_view(template_name='pages/rules.html'), 
-        name='rules'
-    ),
-    path('', include('blog.urls', namespace='blog')),
     path('admin/', admin.site.urls),
-    path('auth/', include('users.urls')),
     path('auth/', include('django.contrib.auth.urls')),
-    path('', include('blog.urls', namespace='blog')),
+    path('auth/', include('users.urls')),
+    
+    path('about/', TemplateView.as_view(template_name='pages/about.html'), name='about'),
+    path('rules/', TemplateView.as_view(template_name='pages/rules.html'), name='rules'),
+    
     path('pages/', include('pages.urls', namespace='pages')),
+    path('', include('blog.urls', namespace='blog')),
 ]
+
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

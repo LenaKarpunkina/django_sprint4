@@ -1,5 +1,7 @@
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.utils import timezone
+from django.db.models import Count
 
 User = get_user_model()
 
@@ -51,6 +53,18 @@ class Category(models.Model):
         return self.title
 
 
+class PublishedQuerySet(models.QuerySet):
+    def published(self):
+        return self.filter(
+            is_published=True,
+            pub_date__lte=timezone.now(),
+            category__is_published=True
+        )
+    
+    def with_comments_count(self):
+        return self.annotate(comment_count=Count('comments'))
+
+
 class Post(models.Model):
     title = models.CharField(
         max_length=256, verbose_name='Заголовок'
@@ -88,10 +102,13 @@ class Post(models.Model):
         auto_now_add=True, verbose_name='Добавлено'
     )
     image = models.ImageField(
-            'Изображение',
-            upload_to='post_images',
-            blank=True,
-            help_text='Загрузите картинку для вашего поста')
+        'Изображение',
+        upload_to='post_images',
+        blank=True,
+        help_text='Загрузите картинку для вашего поста'
+    )
+
+    objects = PublishedQuerySet.as_manager()
 
     class Meta:
         verbose_name = 'публикация'
@@ -99,6 +116,7 @@ class Post(models.Model):
 
     def __str__(self):
         return self.title
+
 
 class Comment(models.Model):
     text = models.TextField('Текст комментария')
